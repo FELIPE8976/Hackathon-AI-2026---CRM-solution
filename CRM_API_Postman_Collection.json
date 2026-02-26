@@ -1,0 +1,603 @@
+{
+  "info": {
+    "name": "CRM Multi-Agent API — Hackathon 2026",
+    "_postman_id": "crm-multiagent-hackathon-2026",
+    "description": "Colección completa para probar el sistema multi-agente CRM con LangGraph.\n\nFlujo recomendado:\n1. Ejecutar un request de la carpeta 'Escalación' → captura automática del run_id\n2. Ir a 'Supervisor' → Aprobar o Rechazar usando el run_id guardado",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "URL base del servidor FastAPI"
+    },
+    {
+      "key": "run_id",
+      "value": "",
+      "type": "string",
+      "description": "Capturado automáticamente al generar una escalación"
+    }
+  ],
+  "item": [
+    {
+      "name": "🟢 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verifica que el servidor está corriendo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = healthy', () => {",
+                  "    pm.expect(pm.response.json().status).to.equal('healthy');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔵 Webhook — Flujos Automáticos",
+      "description": "Mensajes que el sistema procesa sin intervención humana.\nResultado esperado: status = 'processed'",
+      "item": [
+        {
+          "name": "1 · Consulta general (EN)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-001\",\n    \"message\": \"Hi, I would like to know the current status of my order #78432. Could you provide an update?\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = processed', () => pm.expect(d.status).to.equal('processed'));",
+                  "pm.test('sentiment is neutral or positive', () => pm.expect(d.sentiment).to.be.oneOf(['neutral', 'positive']));",
+                  "pm.test('execution_result exists', () => pm.expect(d.execution_result).to.not.be.null);",
+                  "pm.test('no supervisor_note on auto cases', () => pm.expect(d.supervisor_note).to.be.null);",
+                  "console.log('Response drafted:', d.execution_result);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 · Consulta general (ES)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-002\",\n    \"message\": \"Hola, quisiera saber cuándo estará disponible el nuevo plan de facturación mensual para empresas medianas.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = processed', () => pm.expect(d.status).to.equal('processed'));",
+                  "pm.test('execution_result in Spanish', () => {",
+                  "    const text = (d.execution_result || '').toLowerCase();",
+                  "    const hasSpanish = ['su', 'hemos', 'usted', 'recibido', 'equipo', 'pronto'].some(w => text.includes(w));",
+                  "    pm.expect(hasSpanish, 'Response should be in Spanish').to.be.true;",
+                  "});",
+                  "console.log('Respuesta generada:', d.execution_result);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3 · Solicitud de reembolso (neutral)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-003\",\n    \"message\": \"I need to process a refund for invoice INV-2026-0041. The product did not meet the agreed specifications.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('proposed_action = process_refund', () => pm.expect(d.proposed_action).to.equal('process_refund'));",
+                  "pm.test('status = processed', () => pm.expect(d.status).to.equal('processed'));",
+                  "pm.test('execution_result mentions refund', () => {",
+                  "    const text = (d.execution_result || '').toLowerCase();",
+                  "    pm.expect(text).to.match(/refund|reembolso|processed|process/);",
+                  "});",
+                  "console.log('Refund response:', d.execution_result);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4 · Mensaje positivo — felicitación",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-004\",\n    \"message\": \"I just wanted to say that your support team was absolutely excellent. The issue was resolved in record time. Thank you!\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sentiment = positive', () => pm.expect(d.sentiment).to.equal('positive'));",
+                  "pm.test('status = processed', () => pm.expect(d.status).to.equal('processed'));",
+                  "console.log('Response:', d.execution_result);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔴 Webhook — Flujos de Escalación",
+      "description": "Mensajes que requieren aprobación humana.\nResultado esperado: status = 'pending_approval'\nEl run_id se guarda automáticamente en la variable de colección {{run_id}}",
+      "item": [
+        {
+          "name": "5 · Cliente furioso — daño en producto (EN) ⚡",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-005\",\n    \"message\": \"This is completely unacceptable! My shipment arrived destroyed for the second consecutive time. I am furious and I will escalate this directly to your CEO if this is not resolved today.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = pending_approval', () => pm.expect(d.status).to.equal('pending_approval'));",
+                  "pm.test('sentiment = negative', () => pm.expect(d.sentiment).to.equal('negative'));",
+                  "pm.test('proposed_action = escalate_to_human', () => pm.expect(d.proposed_action).to.equal('escalate_to_human'));",
+                  "pm.test('supervisor_note generated', () => pm.expect(d.supervisor_note).to.not.be.null);",
+                  "if (d.run_id) {",
+                  "    pm.collectionVariables.set('run_id', d.run_id);",
+                  "    console.log('✔ run_id saved to collection variable:', d.run_id);",
+                  "}",
+                  "console.log('Supervisor note:', d.supervisor_note);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6 · Cliente enojado — reembolso urgente (ES) ⚡",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-006\",\n    \"message\": \"Esto es un fraude. Me cobraron dos veces por el mismo servicio y nadie me responde. Exijo una devolución inmediata o presentaré una queja formal ante el regulador.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = pending_approval', () => pm.expect(d.status).to.equal('pending_approval'));",
+                  "pm.test('sentiment = negative', () => pm.expect(d.sentiment).to.equal('negative'));",
+                  "pm.test('supervisor_note generated', () => pm.expect(d.supervisor_note).to.not.be.null);",
+                  "if (d.run_id) {",
+                  "    pm.collectionVariables.set('run_id', d.run_id);",
+                  "    console.log('✔ run_id saved:', d.run_id);",
+                  "}",
+                  "console.log('Nota supervisión:', d.supervisor_note);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7 · SLA Breach — sin respuesta hace 5 horas ⚡",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-007\",\n    \"message\": \"I submitted a support request 5 hours ago and have not received any response. My service is currently down and this is impacting our business operations.\",\n    \"timestamp\": \"{{old_timestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Genera un timestamp de hace 5 horas para forzar SLA breach",
+                  "const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();",
+                  "pm.collectionVariables.set('old_timestamp', fiveHoursAgo);",
+                  "console.log('Timestamp used (5h ago):', fiveHoursAgo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sla_breached = true', () => pm.expect(d.sla_breached).to.be.true);",
+                  "pm.test('status = pending_approval', () => pm.expect(d.status).to.equal('pending_approval'));",
+                  "pm.test('supervisor_note generated', () => pm.expect(d.supervisor_note).to.not.be.null);",
+                  "if (d.run_id) {",
+                  "    pm.collectionVariables.set('run_id', d.run_id);",
+                  "    console.log('✔ run_id saved:', d.run_id);",
+                  "}",
+                  "console.log('SLA note:', d.supervisor_note);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8 · SLA Breach + Sentimiento negativo combinado ⚡",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-008\",\n    \"message\": \"Terrible service. I opened a ticket 6 hours ago about a critical outage affecting all our users and nobody has bothered to respond. This is absolutely unacceptable.\",\n    \"timestamp\": \"{{old_timestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();",
+                  "pm.collectionVariables.set('old_timestamp', sixHoursAgo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sla_breached = true', () => pm.expect(d.sla_breached).to.be.true);",
+                  "pm.test('sentiment = negative', () => pm.expect(d.sentiment).to.equal('negative'));",
+                  "pm.test('status = pending_approval', () => pm.expect(d.status).to.equal('pending_approval'));",
+                  "if (d.run_id) pm.collectionVariables.set('run_id', d.run_id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🟡 Supervisor — Human-in-the-Loop",
+      "description": "Endpoints para que el supervisor gestione las aprobaciones pendientes.\nUsa el {{run_id}} capturado automáticamente por los requests de escalación.",
+      "item": [
+        {
+          "name": "9 · Listar aprobaciones pendientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/supervisor/pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "supervisor", "pending"]
+            },
+            "description": "Devuelve todos los mensajes esperando decisión del supervisor, incluyendo el supervisor_note generado por el agente Triage."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is an array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "const items = pm.response.json();",
+                  "console.log(`Pending approvals: ${items.length}`);",
+                  "items.forEach(item => {",
+                  "    console.log(`  [${item.run_id.slice(0,8)}...] client=${item.client_id} | sentiment=${item.sentiment} | sla=${item.sla_breached}`);",
+                  "    console.log(`  Note: ${item.supervisor_note}`);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 · Aprobar acción ✅",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"run_id\": \"{{run_id}}\",\n    \"approved\": true,\n    \"reason\": \"Verified high-priority client. Proceed with immediate resolution and assign to senior support team.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/supervisor/decide",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "supervisor", "decide"]
+            },
+            "description": "Aprueba la acción pendiente. El Executor generará una respuesta personalizada para el cliente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = approved_and_executed', () => pm.expect(d.status).to.equal('approved_and_executed'));",
+                  "pm.test('execution_result generated by LLM', () => pm.expect(d.execution_result).to.not.be.null);",
+                  "console.log('Client response sent:', d.execution_result);",
+                  "// Limpiar run_id tras usarlo",
+                  "pm.collectionVariables.set('run_id', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 · Rechazar acción ❌",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"run_id\": \"{{run_id}}\",\n    \"approved\": false,\n    \"reason\": \"Duplicate case — already being handled directly by the account manager. No automated response required.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/supervisor/decide",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "supervisor", "decide"]
+            },
+            "description": "Rechaza la acción pendiente. No se genera ninguna respuesta al cliente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = rejected', () => pm.expect(d.status).to.equal('rejected'));",
+                  "pm.test('execution_result is null on rejection', () => pm.expect(d.execution_result).to.be.null);",
+                  "pm.collectionVariables.set('run_id', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 · Decidir con run_id inexistente → 404",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"run_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"approved\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/supervisor/decide",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "supervisor", "decide"]
+            },
+            "description": "Valida el manejo de errores cuando el run_id no existe."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404 for unknown run_id', () => pm.response.to.have.status(404));",
+                  "pm.test('error detail present', () => pm.expect(pm.response.json()).to.have.property('detail'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "⚫ Validaciones de Entrada",
+      "description": "Pruebas de validación Pydantic — todos deben retornar HTTP 422",
+      "item": [
+        {
+          "name": "13 · Sin timestamp → 422",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-ERR-001\",\n    \"message\": \"Missing timestamp field\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422 Unprocessable Entity', () => pm.response.to.have.status(422));",
+                  "const errors = pm.response.json().detail;",
+                  "pm.test('timestamp field flagged', () => {",
+                  "    const fields = errors.map(e => e.loc.join('.'));",
+                  "    pm.expect(fields.some(f => f.includes('timestamp'))).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 · client_id vacío → 422",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"\",\n    \"message\": \"Empty client_id\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422 for empty client_id', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 · Timestamp con formato inválido → 422",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-ERR-003\",\n    \"message\": \"Bad timestamp format\",\n    \"timestamp\": \"26-02-2026 10:00\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422 for invalid timestamp format', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
