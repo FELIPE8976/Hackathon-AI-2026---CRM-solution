@@ -45,6 +45,7 @@ async def receive_message(payload: WebhookPayload) -> ProcessingResponse:
         "intent": "general_inquiry",
         "sla_breached": False,
         "proposed_action": "",
+        "supervisor_note": None,
         "human_approved": None,
         "execution_result": None,
     }
@@ -63,6 +64,7 @@ async def receive_message(payload: WebhookPayload) -> ProcessingResponse:
             sentiment=final_state["sentiment"],
             sla_breached=final_state["sla_breached"],
             proposed_action=final_state["proposed_action"],
+            supervisor_note=final_state.get("supervisor_note"),
             execution_result=None,
             message=(
                 f"Message from client '{payload.client_id}' requires human approval "
@@ -80,6 +82,7 @@ async def receive_message(payload: WebhookPayload) -> ProcessingResponse:
         sentiment=final_state["sentiment"],
         sla_breached=final_state["sla_breached"],
         proposed_action=final_state["proposed_action"],
+        supervisor_note=None,
         execution_result=final_state.get("execution_result"),
         message=(
             f"Message from client '{payload.client_id}' processed automatically. "

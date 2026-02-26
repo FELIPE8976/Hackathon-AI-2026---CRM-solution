@@ -1,45 +1,75 @@
 """
-Analyst Agent (Mock)
+Analyst Agent
 
-Responsibility: Extract *sentiment* and *intent* from the latest client message.
+Responsibility: Classify the incoming client message into a precise
+*sentiment* and *intent* using a constrained LLM call with structured output.
 
-This is a keyword-based mock. Replace the body of `run_analyst` with an LLM
-call (e.g. langchain_openai.ChatOpenAI) once the API key is available.
+Uses OpenAI function-calling under the hood via `with_structured_output`,
+which eliminates free-text parsing and prevents hallucination of invalid values.
 """
 
+from pydantic import BaseModel
+from typing import Literal
+from langchain_openai import ChatOpenAI
+
 from app.agents.state import AgentState
+from app.core.config import settings
+
 
 # ---------------------------------------------------------------------------
-# Keyword dictionaries (bilingual EN / ES for CRM context)
+# Output contract — the LLM is forced to return exactly this shape
 # ---------------------------------------------------------------------------
 
-_NEGATIVE_KEYWORDS = {
-    # English
-    "urgent", "angry", "terrible", "worst", "horrible", "unacceptable",
-    "furious", "awful", "disgusting", "broken", "damaged", "fraud", "scam",
-    # Spanish
-    "urgente", "enojado", "terrible", "pésimo", "horrible", "inaceptable",
-    "furioso", "estafado", "fraude", "dañado", "roto", "molesto",
-}
+class _AnalystOutput(BaseModel):
+    sentiment: Literal["positive", "neutral", "negative"]
+    intent: Literal["refund_request", "support_request", "general_inquiry"]
 
-_POSITIVE_KEYWORDS = {
-    # English
-    "great", "happy", "thanks", "thank", "excellent", "wonderful",
-    "perfect", "love", "amazing", "satisfied", "pleased",
-    # Spanish
-    "genial", "feliz", "gracias", "excelente", "maravilloso",
-    "perfecto", "encanta", "increíble", "satisfecho",
-}
 
-_REFUND_KEYWORDS = {
-    "refund", "reimbursement", "money back", "charge back",
-    "devolución", "reembolso", "devolver dinero",
-}
+# ---------------------------------------------------------------------------
+# System prompt — strict, closed-domain, no room for fabrication
+# ---------------------------------------------------------------------------
 
-_SUPPORT_KEYWORDS = {
-    "support", "help", "issue", "problem", "error", "not working", "fix",
-    "soporte", "ayuda", "problema", "error", "no funciona", "arreglar",
-}
+_SYSTEM_PROMPT = """\
+You are a CRM message classifier for an enterprise B2B support system.
+
+TASK: Classify the client message into exactly the categories below. \
+No other values are accepted.
+
+SENTIMENT CATEGORIES:
+- "negative": dissatisfaction, frustration, anger, urgency caused by a \
+problem, complaint, or implicit/explicit threat to escalate or cancel.
+- "positive": satisfaction, gratitude, compliment, or explicit approval.
+- "neutral": factual question, status request, or informational inquiry \
+with no emotional charge.
+
+INTENT CATEGORIES:
+- "refund_request": explicit or implicit request for money back, order \
+cancellation with refund, billing dispute, or chargeback.
+- "support_request": report of a technical or operational problem, \
+service malfunction, or a request for help resolving an issue.
+- "general_inquiry": question about information, pricing, availability, \
+status, or any topic not covered by the categories above.
+
+CLASSIFICATION RULES:
+1. Base your classification only on what is explicitly written or \
+unambiguously implied in the message.
+2. Do not assume context or history beyond the message provided.
+3. When sentiment is borderline, default to "negative" — it is safer \
+to escalate unnecessarily than to miss a dissatisfied client.
+4. Respond exclusively with the required structured output.\
+"""
+
+
+# ---------------------------------------------------------------------------
+# LLM singleton — instantiated once at module load, reused across requests
+# ---------------------------------------------------------------------------
+
+_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0,          # deterministic: classification must be reproducible
+    openai_api_key=settings.OPENAI_API_KEY,
+)
+_structured_llm = _llm.with_structured_output(_AnalystOutput)
 
 
 # ---------------------------------------------------------------------------
@@ -48,33 +78,26 @@ _SUPPORT_KEYWORDS = {
 
 def run_analyst(state: AgentState) -> dict:
     """
-    Mock Analyst Agent node.
+    Analyst Agent node for LangGraph.
 
-    Reads the last message in `state["messages"]`, infers sentiment and
-    intent, and returns a partial state update.
-
-    Returns a *dict* (not a full AgentState) — LangGraph merges it into
-    the existing state automatically.
+    Calls the LLM with a strict classification prompt and returns a partial
+    state update. Falls back to safe defaults if the LLM call fails.
     """
-    message: str = state["messages"][-1]["content"].lower()
-    words = set(message.split())
+    message: str = state["messages"][-1]["content"]
 
-    # --- Sentiment ---
-    if words & _NEGATIVE_KEYWORDS:
-        sentiment = "negative"
-    elif words & _POSITIVE_KEYWORDS:
-        sentiment = "positive"
-    else:
+    try:
+        result: _AnalystOutput = _structured_llm.invoke([
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": message},
+        ])
+        sentiment = result.sentiment
+        intent    = result.intent
+
+    except Exception as exc:
+        # Fallback: safe defaults that avoid silent failures blocking the pipeline
+        print(f"[ANALYST] LLM error — falling back to defaults. Error: {exc}")
         sentiment = "neutral"
-
-    # --- Intent (check multi-word phrases too) ---
-    if any(kw in message for kw in _REFUND_KEYWORDS):
-        intent = "refund_request"
-    elif any(kw in message for kw in _SUPPORT_KEYWORDS):
-        intent = "support_request"
-    else:
-        intent = "general_inquiry"
+        intent    = "general_inquiry"
 
     print(f"[ANALYST] client={state['client_id']} → sentiment={sentiment}, intent={intent}")
-
     return {"sentiment": sentiment, "intent": intent}

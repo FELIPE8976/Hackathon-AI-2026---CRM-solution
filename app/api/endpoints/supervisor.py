@@ -40,6 +40,7 @@ async def get_pending_approvals() -> List[PendingApprovalItem]:
                 sentiment=state["sentiment"],
                 sla_breached=state["sla_breached"],
                 proposed_action=state["proposed_action"],
+                supervisor_note=state.get("supervisor_note"),
                 timestamp=state["timestamp"],
             )
         )
@@ -87,6 +88,7 @@ async def decide_action(decision: SupervisorDecision) -> ProcessingResponse:
             sentiment=state["sentiment"],
             sla_breached=state["sla_breached"],
             proposed_action=state["proposed_action"],
+            supervisor_note=state.get("supervisor_note"),
             execution_result=state.get("execution_result"),
             message=(
                 f"Action approved and executed for client '{state['client_id']}'. "
@@ -104,6 +106,7 @@ async def decide_action(decision: SupervisorDecision) -> ProcessingResponse:
         sentiment=state["sentiment"],
         sla_breached=state["sla_breached"],
         proposed_action=state["proposed_action"],
+        supervisor_note=state.get("supervisor_note"),
         execution_result=None,
         message=(
             f"Action rejected by supervisor for client '{state['client_id']}'. "
