@@ -65,7 +65,7 @@ to escalate unnecessarily than to miss a dissatisfied client.
 # ---------------------------------------------------------------------------
 
 _llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash-lite",
     temperature=0,          # deterministic: classification must be reproducible
     google_api_key=settings.GEMINI_API_KEY,
 )
@@ -99,5 +99,5 @@ def run_analyst(state: AgentState) -> dict:
         sentiment = "neutral"
         intent    = "general_inquiry"
 
-    print(f"[ANALYST] client={state['client_id']} → sentiment={sentiment}, intent={intent}")
+    print(f"[ANALYST] client={state['client_id']} | sentiment={sentiment}, intent={intent}")
     return {"sentiment": sentiment, "intent": intent}

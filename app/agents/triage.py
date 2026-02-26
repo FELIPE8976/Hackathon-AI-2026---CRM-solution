@@ -50,7 +50,7 @@ CONSTRAINTS:
 # ---------------------------------------------------------------------------
 
 _llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash-lite",
     temperature=0.1,        # slight variation for natural phrasing, not creativity
     google_api_key=settings.GEMINI_API_KEY,
 )
@@ -141,7 +141,7 @@ def run_triage(state: AgentState) -> dict:
         proposed_action = "send_standard_response"
 
     print(
-        f"[TRIAGE]  client={state['client_id']} → "
+        f"[TRIAGE]  client={state['client_id']} | "
         f"sla_breached={sla_breached}, proposed_action={proposed_action}"
     )
 

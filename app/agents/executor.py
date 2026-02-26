@@ -67,7 +67,7 @@ CONTENT INSTRUCTION:
 # ---------------------------------------------------------------------------
 
 _llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash-lite",
     temperature=0.3,        # natural variation in phrasing while staying professional
     google_api_key=settings.GEMINI_API_KEY,
 )
@@ -118,5 +118,5 @@ def run_executor(state: AgentState) -> dict:
         print(f"[EXECUTOR] LLM error — using static fallback. Error: {exc}")
         execution_result = _FALLBACK_RESPONSES.get(action, _FALLBACK_RESPONSES["send_standard_response"])
 
-    print(f"[EXECUTOR] client={state['client_id']} → response drafted for action={action}")
+    print(f"[EXECUTOR] client={state['client_id']} | response drafted for action={action}")
     return {"execution_result": execution_result}
