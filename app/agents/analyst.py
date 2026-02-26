@@ -10,7 +10,7 @@ which eliminates free-text parsing and prevents hallucination of invalid values.
 
 from pydantic import BaseModel
 from typing import Literal
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -64,10 +64,10 @@ to escalate unnecessarily than to miss a dissatisfied client.
 # LLM singleton — instantiated once at module load, reused across requests
 # ---------------------------------------------------------------------------
 
-_llm = ChatOpenAI(
-    model="gpt-4o-mini",
+_llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
     temperature=0,          # deterministic: classification must be reproducible
-    openai_api_key=settings.OPENAI_API_KEY,
+    google_api_key=settings.GEMINI_API_KEY,
 )
 _structured_llm = _llm.with_structured_output(_AnalystOutput)
 

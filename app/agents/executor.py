@@ -11,7 +11,7 @@ stylistic constraints so that every response is:
   - Actionable — every response closes with a clear next step.
 """
 
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -66,10 +66,10 @@ CONTENT INSTRUCTION:
 # LLM singleton — slightly higher temperature for natural, varied phrasing
 # ---------------------------------------------------------------------------
 
-_llm = ChatOpenAI(
-    model="gpt-4o-mini",
+_llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
     temperature=0.3,        # natural variation in phrasing while staying professional
-    openai_api_key=settings.OPENAI_API_KEY,
+    google_api_key=settings.GEMINI_API_KEY,
 )
 
 

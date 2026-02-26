@@ -17,7 +17,7 @@ Design rationale:
 
 from datetime import datetime, timezone
 
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -49,10 +49,10 @@ CONSTRAINTS:
 # LLM singleton — low temperature for consistent, professional phrasing
 # ---------------------------------------------------------------------------
 
-_llm = ChatOpenAI(
-    model="gpt-4o-mini",
+_llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
     temperature=0.1,        # slight variation for natural phrasing, not creativity
-    openai_api_key=settings.OPENAI_API_KEY,
+    google_api_key=settings.GEMINI_API_KEY,
 )
 
 
