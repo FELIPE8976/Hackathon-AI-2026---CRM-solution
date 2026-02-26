@@ -1,0 +1,32 @@
+from typing import TypedDict, List, Optional
+
+
+class AgentState(TypedDict):
+    """
+    Shared state that flows through every node in the LangGraph pipeline.
+
+    Fields
+    ------
+    client_id       : CRM identifier of the originating client.
+    messages        : Conversation history (list of {"role": ..., "content": ...} dicts).
+    timestamp       : ISO 8601 string of the original message timestamp.
+    sentiment       : Sentiment detected by the Analyst agent.
+                      Values: "positive" | "neutral" | "negative"
+    intent          : High-level intent detected by the Analyst agent.
+                      Values: "refund_request" | "support_request" | "general_inquiry"
+    sla_breached    : True when the message age exceeds the configured SLA threshold.
+    proposed_action : Action recommended by the Triage agent.
+                      Values: "send_standard_response" | "process_refund" | "escalate_to_human"
+    human_approved  : None = not yet decided | True = approved | False = rejected.
+    execution_result: Confirmation string produced by the Executor agent.
+    """
+
+    client_id: str
+    messages: List[dict]
+    timestamp: str
+    sentiment: str
+    intent: str
+    sla_breached: bool
+    proposed_action: str
+    human_approved: Optional[bool]
+    execution_result: Optional[str]

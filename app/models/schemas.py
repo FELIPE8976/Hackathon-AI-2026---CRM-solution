@@ -1,0 +1,79 @@
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Optional
+
+
+# ---------------------------------------------------------------------------
+# Webhook / Ingestion
+# ---------------------------------------------------------------------------
+
+class WebhookPayload(BaseModel):
+    """Incoming message payload received from the CRM webhook."""
+
+    client_id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier of the client in the CRM.",
+        examples=["CRM-001"],
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Raw message content sent by the client.",
+        examples=["This is urgent! My order arrived damaged and I want a refund!"],
+    )
+    timestamp: datetime = Field(
+        ...,
+        description="ISO 8601 timestamp indicating when the message was sent.",
+        examples=["2024-01-15T10:00:00Z"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Processing Response (shared by webhook + supervisor)
+# ---------------------------------------------------------------------------
+
+class ProcessingResponse(BaseModel):
+    """Standard API response returned after processing a message or a decision."""
+
+    run_id: str = Field(..., description="Unique identifier for this processing run.")
+    status: str = Field(
+        ...,
+        description=(
+            "Current status: 'processed' | 'pending_approval' | "
+            "'approved_and_executed' | 'rejected'"
+        ),
+    )
+    sentiment: str = Field(..., description="Detected sentiment: positive | neutral | negative.")
+    sla_breached: bool = Field(..., description="Whether the SLA threshold was exceeded.")
+    proposed_action: str = Field(..., description="Action proposed by the Triage agent.")
+    execution_result: Optional[str] = Field(
+        None, description="Confirmation message from the Executor agent (if executed)."
+    )
+    message: str = Field(..., description="Human-readable summary of the outcome.")
+
+
+# ---------------------------------------------------------------------------
+# Supervisor
+# ---------------------------------------------------------------------------
+
+class PendingApprovalItem(BaseModel):
+    """Summary of a single item waiting for human supervisor approval."""
+
+    run_id: str
+    client_id: str
+    message: str
+    sentiment: str
+    sla_breached: bool
+    proposed_action: str
+    timestamp: str
+
+
+class SupervisorDecision(BaseModel):
+    """Decision payload submitted by the human supervisor."""
+
+    run_id: str = Field(..., description="The run ID of the pending action to decide on.")
+    approved: bool = Field(..., description="True to approve and execute; False to reject.")
+    reason: Optional[str] = Field(
+        None, description="Optional free-text reason for the decision."
+    )
