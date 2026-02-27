@@ -10,10 +10,14 @@ so that the automated response is finally sent to the client.
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.executor import run_executor
-from app.core.store import pending_approvals
+from app.core.database import get_db
+from app.core.limiter import limiter
+from app.core.security import get_current_supervisor
+from app.core.store import delete_pending, get_pending, list_pending
 from app.models.schemas import PendingApprovalItem, ProcessingResponse, SupervisorDecision
 
 router = APIRouter()
@@ -29,9 +33,15 @@ router = APIRouter()
     summary="List actions pending human approval",
     description="Returns all messages that were escalated and are waiting for a supervisor decision.",
 )
-async def get_pending_approvals() -> List[PendingApprovalItem]:
+@limiter.limit("60/minute")
+async def get_pending_approvals(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_supervisor),
+) -> List[PendingApprovalItem]:
+    items = await list_pending(db)
     result: List[PendingApprovalItem] = []
-    for run_id, state in pending_approvals.items():
+    for run_id, state in items:
         result.append(
             PendingApprovalItem(
                 run_id=run_id,
@@ -60,8 +70,14 @@ async def get_pending_approvals() -> List[PendingApprovalItem]:
         "If approved, the Executor agent will be called immediately."
     ),
 )
-async def decide_action(decision: SupervisorDecision) -> ProcessingResponse:
-    state = pending_approvals.get(decision.run_id)
+@limiter.limit("30/minute")
+async def decide_action(
+    request: Request,
+    decision: SupervisorDecision,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_supervisor),
+) -> ProcessingResponse:
+    state = await get_pending(decision.run_id, db)
     if state is None:
         raise HTTPException(
             status_code=404,
@@ -72,7 +88,7 @@ async def decide_action(decision: SupervisorDecision) -> ProcessingResponse:
         )
 
     # Remove from the pending queue regardless of the decision
-    del pending_approvals[decision.run_id]
+    await delete_pending(decision.run_id, db)
 
     # ------------------------------------------------------------------ #
     # Approved → run executor and return result                            #

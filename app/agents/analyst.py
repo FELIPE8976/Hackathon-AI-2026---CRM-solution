@@ -8,12 +8,16 @@ Uses OpenAI function-calling under the hood via `with_structured_output`,
 which eliminates free-text parsing and prevents hallucination of invalid values.
 """
 
+import logging
+
 from pydantic import BaseModel
 from typing import Literal
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -95,9 +99,9 @@ def run_analyst(state: AgentState) -> dict:
 
     except Exception as exc:
         # Fallback: safe defaults that avoid silent failures blocking the pipeline
-        print(f"[ANALYST] LLM error — falling back to defaults. Error: {exc}")
+        logger.error("LLM error — falling back to defaults. client=%s error=%s", state["client_id"], exc)
         sentiment = "neutral"
         intent    = "general_inquiry"
 
-    print(f"[ANALYST] client={state['client_id']} | sentiment={sentiment}, intent={intent}")
+    logger.info("client=%s sentiment=%s intent=%s", state["client_id"], sentiment, intent)
     return {"sentiment": sentiment, "intent": intent}

@@ -7,17 +7,22 @@ Receives a simulated CRM message, runs it through the LangGraph pipeline
 (Analyst → Triage → Executor or pause), and returns the outcome.
 
 If the Triage agent decides to escalate (negative sentiment or SLA breach),
-the state is stored in the in-memory `pending_approvals` store and the caller
-receives a `pending_approval` status with the `run_id` needed to decide later.
+the state is persisted to PostgreSQL and the caller receives a
+`pending_approval` status with the `run_id` needed to decide later.
 """
 
+import asyncio
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.orchestrator import crm_graph
 from app.agents.state import AgentState
-from app.core.store import pending_approvals
+from app.core.database import get_db
+from app.core.limiter import limiter
+from app.core.security import verify_api_key
+from app.core.store import save_pending
 from app.models.schemas import ProcessingResponse, WebhookPayload
 
 router = APIRouter()
@@ -32,7 +37,13 @@ router = APIRouter()
         "Returns immediately with either 'processed' or 'pending_approval'."
     ),
 )
-async def receive_message(payload: WebhookPayload) -> ProcessingResponse:
+@limiter.limit("30/minute")
+async def receive_message(
+    request: Request,
+    payload: WebhookPayload,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key),
+) -> ProcessingResponse:
     run_id = str(uuid.uuid4())
 
     # Build the initial state that enters the graph
@@ -50,14 +61,14 @@ async def receive_message(payload: WebhookPayload) -> ProcessingResponse:
         "execution_result": None,
     }
 
-    # Run the graph (synchronous invoke — safe inside async FastAPI via threadpool)
-    final_state: AgentState = crm_graph.invoke(initial_state)
+    # Run the synchronous LangGraph graph in a thread to avoid blocking the event loop
+    final_state: AgentState = await asyncio.to_thread(crm_graph.invoke, initial_state)
 
     # ------------------------------------------------------------------ #
     # Branch: graph paused — supervisor must approve before proceeding     #
     # ------------------------------------------------------------------ #
     if final_state.get("proposed_action") == "escalate_to_human":
-        pending_approvals[run_id] = final_state
+        await save_pending(run_id, final_state, db)
         return ProcessingResponse(
             run_id=run_id,
             status="pending_approval",

@@ -11,10 +11,14 @@ stylistic constraints so that every response is:
   - Actionable — every response closes with a clear next step.
 """
 
+import logging
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -115,8 +119,8 @@ def run_executor(state: AgentState) -> dict:
         execution_result = response.content.strip()
 
     except Exception as exc:
-        print(f"[EXECUTOR] LLM error — using static fallback. Error: {exc}")
+        logger.error("LLM error — using static fallback. client=%s error=%s", state["client_id"], exc)
         execution_result = _FALLBACK_RESPONSES.get(action, _FALLBACK_RESPONSES["send_standard_response"])
 
-    print(f"[EXECUTOR] client={state['client_id']} | response drafted for action={action}")
+    logger.info("client=%s action=%s response_drafted=true", state["client_id"], action)
     return {"execution_result": execution_result}

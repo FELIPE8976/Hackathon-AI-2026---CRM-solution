@@ -15,12 +15,15 @@ Design rationale:
     where natural language synthesis genuinely adds value.
 """
 
+import logging
 from datetime import datetime, timezone
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +102,7 @@ def _generate_supervisor_note(state: AgentState, sla_breached: bool) -> str | No
         ])
         return response.content.strip()
     except Exception as exc:
-        print(f"[TRIAGE] Supervisor note generation failed: {exc}")
+        logger.error("Supervisor note generation failed: %s", exc)
         return None
 
 
@@ -140,9 +143,9 @@ def run_triage(state: AgentState) -> dict:
     else:
         proposed_action = "send_standard_response"
 
-    print(
-        f"[TRIAGE]  client={state['client_id']} | "
-        f"sla_breached={sla_breached}, proposed_action={proposed_action}"
+    logger.info(
+        "client=%s sla_breached=%s proposed_action=%s",
+        state["client_id"], sla_breached, proposed_action,
     )
 
     return {

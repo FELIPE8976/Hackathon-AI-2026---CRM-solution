@@ -199,6 +199,39 @@ def api_post(path: str, payload: dict):
         return None
 
 
+def api_get_auth(path: str, token: str):
+    """GET with JWT Bearer token — use for protected supervisor endpoints."""
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        return requests.get(get_api_url() + path, headers=headers, timeout=5)
+    except requests.exceptions.RequestException:
+        return None
+
+
+def api_post_auth(path: str, payload: dict, token: str):
+    """POST with JWT Bearer token — use for protected supervisor endpoints."""
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        return requests.post(get_api_url() + path, json=payload, headers=headers, timeout=15)
+    except requests.exceptions.RequestException:
+        return None
+
+
+def login(username: str, password: str):
+    """Call POST /api/v1/auth/login (form-data) and return the token string or None."""
+    try:
+        response = requests.post(
+            get_api_url() + "/api/v1/auth/login",
+            data={"username": username, "password": password},
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.json().get("access_token")
+        return None
+    except requests.exceptions.RequestException:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Badge helpers — Apple HIG HTML chips
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
   "info": {
     "name": "CRM Multi-Agent API — Hackathon 2026",
     "_postman_id": "crm-multiagent-hackathon-2026",
-    "description": "Colección completa para probar el sistema multi-agente CRM con LangGraph.\n\nFlujo recomendado:\n1. Ejecutar un request de la carpeta 'Escalación' → captura automática del run_id\n2. Ir a 'Supervisor' → Aprobar o Rechazar usando el run_id guardado",
+    "description": "Colección completa para probar el sistema multi-agente CRM con LangGraph.\n\nFlujo recomendado:\n1. Ejecutar '0 · Login' en la carpeta Auth → el JWT se guarda automáticamente en {{jwt_token}}\n2. Ejecutar un request de la carpeta 'Escalación' → captura automática del run_id\n3. Ir a 'Supervisor' → Aprobar o Rechazar usando el run_id guardado\n\nVariables de colección requeridas:\n- base_url: URL del servidor (default: http://localhost:8000)\n- webhook_api_key: valor de WEBHOOK_API_KEY en tu .env\n- jwt_token: se llena automáticamente al hacer login",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -17,9 +17,97 @@
       "value": "",
       "type": "string",
       "description": "Capturado automáticamente al generar una escalación"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT del supervisor — se llena automáticamente al ejecutar el request de Login"
+    },
+    {
+      "key": "webhook_api_key",
+      "value": "PEGA_AQUI_TU_WEBHOOK_API_KEY",
+      "type": "string",
+      "description": "Valor de WEBHOOK_API_KEY en el .env — requerido por el webhook endpoint"
     }
   ],
   "item": [
+    {
+      "name": "🔐 Auth",
+      "description": "Login del supervisor. Ejecuta este request primero — el JWT se guarda automáticamente en {{jwt_token}}.",
+      "item": [
+        {
+          "name": "0 · Login supervisor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "supervisor", "type": "text" },
+                { "key": "password", "value": "admin", "type": "text", "description": "Cambia esto por tu contraseña real" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Autenticación del supervisor. Usa form-data (no JSON). El token JWT se guarda automáticamente en la variable {{jwt_token}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('access_token present', () => {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d).to.have.property('access_token');",
+                  "    pm.expect(d.token_type).to.equal('bearer');",
+                  "    pm.collectionVariables.set('jwt_token', d.access_token);",
+                  "    console.log('✔ JWT saved to {{jwt_token}}');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "0b · Login inválido → 401",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "supervisor", "type": "text" },
+                { "key": "password", "value": "wrong-password", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Verifica que credenciales incorrectas devuelven 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 for wrong credentials', () => pm.response.to.have.status(401));",
+                  "pm.test('detail field present', () => pm.expect(pm.response.json()).to.have.property('detail'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "🟢 Health",
       "item": [
@@ -33,7 +121,7 @@
               "host": ["{{base_url}}"],
               "path": ["health"]
             },
-            "description": "Verifica que el servidor está corriendo."
+            "description": "Endpoint público — no requiere autenticación."
           },
           "event": [
             {
@@ -54,13 +142,16 @@
     },
     {
       "name": "🔵 Webhook — Flujos Automáticos",
-      "description": "Mensajes que el sistema procesa sin intervención humana.\nResultado esperado: status = 'processed'",
+      "description": "Mensajes que el sistema procesa sin intervención humana.\nResultado esperado: status = 'processed'\nRequiere header X-Api-Key: {{webhook_api_key}}",
       "item": [
         {
           "name": "1 · Consulta general (EN)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}", "description": "API Key del bot CRM" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-001\",\n    \"message\": \"Hi, I would like to know the current status of my order #78432. Could you provide an update?\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -94,7 +185,10 @@
           "name": "2 · Consulta general (ES)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-002\",\n    \"message\": \"Hola, quisiera saber cuándo estará disponible el nuevo plan de facturación mensual para empresas medianas.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -130,7 +224,10 @@
           "name": "3 · Solicitud de reembolso (neutral)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-003\",\n    \"message\": \"I need to process a refund for invoice INV-2026-0041. The product did not meet the agreed specifications.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -166,7 +263,10 @@
           "name": "4 · Mensaje positivo — felicitación",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-004\",\n    \"message\": \"I just wanted to say that your support team was absolutely excellent. The issue was resolved in record time. Thank you!\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -193,18 +293,50 @@
               }
             }
           ]
+        },
+        {
+          "name": "4b · Sin API Key → 401",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"CRM-TEST\",\n    \"message\": \"Test without API key\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "messages"]
+            },
+            "description": "Verifica que sin X-Api-Key el endpoint devuelve 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 without API key', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "🔴 Webhook — Flujos de Escalación",
-      "description": "Mensajes que requieren aprobación humana.\nResultado esperado: status = 'pending_approval'\nEl run_id se guarda automáticamente en la variable de colección {{run_id}}",
+      "description": "Mensajes que requieren aprobación humana.\nResultado esperado: status = 'pending_approval'\nEl run_id se guarda automáticamente en {{run_id}}",
       "item": [
         {
           "name": "5 · Cliente furioso — daño en producto (EN) ⚡",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-005\",\n    \"message\": \"This is completely unacceptable! My shipment arrived destroyed for the second consecutive time. I am furious and I will escalate this directly to your CEO if this is not resolved today.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -230,7 +362,7 @@
                   "pm.test('supervisor_note generated', () => pm.expect(d.supervisor_note).to.not.be.null);",
                   "if (d.run_id) {",
                   "    pm.collectionVariables.set('run_id', d.run_id);",
-                  "    console.log('✔ run_id saved to collection variable:', d.run_id);",
+                  "    console.log('✔ run_id saved:', d.run_id);",
                   "}",
                   "console.log('Supervisor note:', d.supervisor_note);"
                 ]
@@ -242,7 +374,10 @@
           "name": "6 · Cliente enojado — reembolso urgente (ES) ⚡",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-006\",\n    \"message\": \"Esto es un fraude. Me cobraron dos veces por el mismo servicio y nadie me responde. Exijo una devolución inmediata o presentaré una queja formal ante el regulador.\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -279,7 +414,10 @@
           "name": "7 · SLA Breach — sin respuesta hace 5 horas ⚡",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-007\",\n    \"message\": \"I submitted a support request 5 hours ago and have not received any response. My service is currently down and this is impacting our business operations.\",\n    \"timestamp\": \"{{old_timestamp}}\"\n}",
@@ -297,7 +435,6 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Genera un timestamp de hace 5 horas para forzar SLA breach",
                   "const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();",
                   "pm.collectionVariables.set('old_timestamp', fiveHoursAgo);",
                   "console.log('Timestamp used (5h ago):', fiveHoursAgo);"
@@ -328,7 +465,10 @@
           "name": "8 · SLA Breach + Sentimiento negativo combinado ⚡",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-008\",\n    \"message\": \"Terrible service. I opened a ticket 6 hours ago about a critical outage affecting all our users and nobody has bothered to respond. This is absolutely unacceptable.\",\n    \"timestamp\": \"{{old_timestamp}}\"\n}",
@@ -371,19 +511,20 @@
     },
     {
       "name": "🟡 Supervisor — Human-in-the-Loop",
-      "description": "Endpoints para que el supervisor gestione las aprobaciones pendientes.\nUsa el {{run_id}} capturado automáticamente por los requests de escalación.",
+      "description": "Requiere JWT en Authorization: Bearer {{jwt_token}}.\nEjecuta el request de Login primero para obtener el token.",
       "item": [
         {
           "name": "9 · Listar aprobaciones pendientes",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}", "description": "JWT del supervisor" }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/supervisor/pending",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "supervisor", "pending"]
-            },
-            "description": "Devuelve todos los mensajes esperando decisión del supervisor, incluyendo el supervisor_note generado por el agente Triage."
+            }
           },
           "event": [
             {
@@ -405,10 +546,37 @@
           ]
         },
         {
+          "name": "9b · Sin JWT → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/supervisor/pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "supervisor", "pending"]
+            },
+            "description": "Verifica que sin JWT el endpoint devuelve 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 without JWT', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "10 · Aprobar acción ✅",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"run_id\": \"{{run_id}}\",\n    \"approved\": true,\n    \"reason\": \"Verified high-priority client. Proceed with immediate resolution and assign to senior support team.\"\n}",
@@ -418,8 +586,7 @@
               "raw": "{{base_url}}/api/v1/supervisor/decide",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "supervisor", "decide"]
-            },
-            "description": "Aprueba la acción pendiente. El Executor generará una respuesta personalizada para el cliente."
+            }
           },
           "event": [
             {
@@ -432,7 +599,6 @@
                   "pm.test('status = approved_and_executed', () => pm.expect(d.status).to.equal('approved_and_executed'));",
                   "pm.test('execution_result generated by LLM', () => pm.expect(d.execution_result).to.not.be.null);",
                   "console.log('Client response sent:', d.execution_result);",
-                  "// Limpiar run_id tras usarlo",
                   "pm.collectionVariables.set('run_id', '');"
                 ]
               }
@@ -443,18 +609,20 @@
           "name": "11 · Rechazar acción ❌",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"run_id\": \"{{run_id}}\",\n    \"approved\": false,\n    \"reason\": \"Duplicate case — already being handled directly by the account manager. No automated response required.\"\n}",
+              "raw": "{\n    \"run_id\": \"{{run_id}}\",\n    \"approved\": false,\n    \"reason\": \"Duplicate case — already being handled directly by the account manager.\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{base_url}}/api/v1/supervisor/decide",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "supervisor", "decide"]
-            },
-            "description": "Rechaza la acción pendiente. No se genera ninguna respuesta al cliente."
+            }
           },
           "event": [
             {
@@ -473,10 +641,13 @@
           ]
         },
         {
-          "name": "12 · Decidir con run_id inexistente → 404",
+          "name": "12 · run_id inexistente → 404",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"run_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"approved\": true\n}",
@@ -486,8 +657,7 @@
               "raw": "{{base_url}}/api/v1/supervisor/decide",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "supervisor", "decide"]
-            },
-            "description": "Valida el manejo de errores cuando el run_id no existe."
+            }
           },
           "event": [
             {
@@ -512,7 +682,10 @@
           "name": "13 · Sin timestamp → 422",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-ERR-001\",\n    \"message\": \"Missing timestamp field\"\n}",
@@ -545,7 +718,10 @@
           "name": "14 · client_id vacío → 422",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"\",\n    \"message\": \"Empty client_id\",\n    \"timestamp\": \"{{$isoTimestamp}}\"\n}",
@@ -573,7 +749,10 @@
           "name": "15 · Timestamp con formato inválido → 422",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{webhook_api_key}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"client_id\": \"CRM-ERR-003\",\n    \"message\": \"Bad timestamp format\",\n    \"timestamp\": \"26-02-2026 10:00\"\n}",
