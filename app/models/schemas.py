@@ -72,6 +72,9 @@ class PendingApprovalItem(BaseModel):
     supervisor_note: Optional[str] = Field(
         None, description="Briefing note from Triage to help the supervisor make a decision."
     )
+    suggested_response: Optional[str] = Field(
+        None, description="Draft response suggested by the system for the supervisor to review."
+    )
     timestamp: str
 
 
@@ -80,6 +83,13 @@ class SupervisorDecision(BaseModel):
 
     run_id: str = Field(..., description="The run ID of the pending action to decide on.")
     approved: bool = Field(..., description="True to approve and execute; False to reject.")
+    manual_response: Optional[str] = Field(
+        None,
+        description=(
+            "If provided and approved=True, this text is sent verbatim to the client, "
+            "overriding the system's suggested response."
+        ),
+    )
     reason: Optional[str] = Field(
         None, description="Optional free-text reason for the decision."
     )

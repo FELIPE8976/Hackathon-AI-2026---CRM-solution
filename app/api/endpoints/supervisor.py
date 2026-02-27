@@ -51,6 +51,7 @@ async def get_pending_approvals(
                 sla_breached=state["sla_breached"],
                 proposed_action=state["proposed_action"],
                 supervisor_note=state.get("supervisor_note"),
+                suggested_response=state.get("suggested_response"),
                 timestamp=state["timestamp"],
             )
         )
@@ -91,12 +92,23 @@ async def decide_action(
     await delete_pending(decision.run_id, db)
 
     # ------------------------------------------------------------------ #
-    # Approved → run executor and return result                            #
+    # Approved → use manual response, suggested response, or run executor #
     # ------------------------------------------------------------------ #
     if decision.approved:
         state["human_approved"] = True
-        executor_update = run_executor(state)
-        state.update(executor_update)
+
+        if decision.manual_response and decision.manual_response.strip():
+            # Supervisor wrote a custom response — use it verbatim
+            execution_result = decision.manual_response.strip()
+        elif state.get("suggested_response"):
+            # Supervisor accepted the system's suggestion
+            execution_result = state["suggested_response"]
+        else:
+            # Fallback: generate a response with the executor
+            executor_update = run_executor(state)
+            execution_result = executor_update.get("execution_result")
+
+        state["execution_result"] = execution_result
 
         return ProcessingResponse(
             run_id=decision.run_id,
@@ -105,7 +117,7 @@ async def decide_action(
             sla_breached=state["sla_breached"],
             proposed_action=state["proposed_action"],
             supervisor_note=state.get("supervisor_note"),
-            execution_result=state.get("execution_result"),
+            execution_result=execution_result,
             message=(
                 f"Action approved and executed for client '{state['client_id']}'. "
                 + (f"Supervisor note: {decision.reason}" if decision.reason else "")

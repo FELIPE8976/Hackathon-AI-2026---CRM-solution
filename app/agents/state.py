@@ -31,5 +31,6 @@ class AgentState(TypedDict):
     sla_breached: bool
     proposed_action: str
     supervisor_note: Optional[str]
+    suggested_response: Optional[str]
     human_approved: Optional[bool]
     execution_result: Optional[str]

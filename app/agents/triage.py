@@ -41,6 +41,7 @@ You will receive structured data about a client case. Write a note that:
 should take.
 
 CONSTRAINTS:
+- Detect the language of the client message and write the note in that same language.
 - Professional enterprise tone. No informal language.
 - Do not invent information beyond what is provided.
 - Do not mention agent names, internal system names, or technical terms.
@@ -74,6 +75,28 @@ def _check_sla(timestamp_iso: str) -> bool:
         return elapsed_hours > settings.SLA_THRESHOLD_HOURS
     except (ValueError, KeyError):
         return False  # malformed timestamp: do not penalise with a false SLA breach
+
+
+def _generate_suggested_response(state: AgentState) -> str | None:
+    """
+    Generate a draft response for the supervisor to review.
+    Calls the Executor with the action derived from intent so the suggestion
+    is realistic and actionable, not just a generic acknowledgement.
+    """
+    from app.agents.executor import run_executor
+
+    intent = state.get("intent", "general_inquiry")
+    suggested_action = "process_refund" if intent == "refund_request" else "send_standard_response"
+
+    suggestion_state = dict(state)
+    suggestion_state["proposed_action"] = suggested_action
+
+    try:
+        result = run_executor(suggestion_state)
+        return result.get("execution_result")
+    except Exception as exc:
+        logger.error("Suggested response generation failed: %s", exc)
+        return None
 
 
 def _generate_supervisor_note(state: AgentState, sla_breached: bool) -> str | None:
@@ -132,7 +155,8 @@ def run_triage(state: AgentState) -> dict:
     sla_breached = _check_sla(state["timestamp"])
     sentiment = state.get("sentiment", "neutral")
     intent = state.get("intent", "general_inquiry")
-    supervisor_note = None
+    supervisor_note    = None
+    suggested_response = None
 
     # ------------------------------------------------------------------ #
     # Routing decision — deterministic rule-based matrix                  #
@@ -140,6 +164,7 @@ def run_triage(state: AgentState) -> dict:
     if sla_breached or sentiment == "negative":
         proposed_action = "escalate_to_human"
         supervisor_note = _generate_supervisor_note(state, sla_breached)
+        suggested_response = _generate_suggested_response(state)
 
     elif intent == "refund_request":
         proposed_action = "process_refund"
@@ -155,7 +180,8 @@ def run_triage(state: AgentState) -> dict:
     )
 
     return {
-        "sla_breached": sla_breached,
-        "proposed_action": proposed_action,
-        "supervisor_note": supervisor_note,
+        "sla_breached":       sla_breached,
+        "proposed_action":    proposed_action,
+        "supervisor_note":    supervisor_note,
+        "suggested_response": suggested_response,
     }

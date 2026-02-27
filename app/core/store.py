@@ -25,6 +25,7 @@ async def save_pending(run_id: str, state: dict[str, Any], db: AsyncSession) -> 
         sla_breached=state["sla_breached"],
         proposed_action=state["proposed_action"],
         supervisor_note=state.get("supervisor_note"),
+        suggested_response=state.get("suggested_response"),
         messages_json=state["messages"],
     )
     db.add(row)
@@ -71,6 +72,7 @@ def _row_to_state(row: PendingApproval) -> dict[str, Any]:
         "sla_breached": row.sla_breached,
         "proposed_action": row.proposed_action,
         "supervisor_note": row.supervisor_note,
+        "suggested_response": row.suggested_response,
         "human_approved": None,
         "execution_result": None,
     }

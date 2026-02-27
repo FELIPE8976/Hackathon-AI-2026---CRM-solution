@@ -23,6 +23,7 @@ class PendingApproval(Base):
     sla_breached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     proposed_action: Mapped[str] = mapped_column(nullable=False)
     supervisor_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggested_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     messages_json: Mapped[list] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

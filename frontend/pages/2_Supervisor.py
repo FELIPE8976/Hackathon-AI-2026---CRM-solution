@@ -139,6 +139,14 @@ for item in active:
         if item.get("supervisor_note"):
             st.warning(item["supervisor_note"])
 
+        if item.get("suggested_response"):
+            st.markdown(
+                f"<p style='font-size:0.78rem;font-weight:500;text-transform:uppercase;"
+                f"letter-spacing:0.05em;color:{APPLE['secondary_label']};margin:12px 0 4px'>Respuesta sugerida por el sistema</p>",
+                unsafe_allow_html=True,
+            )
+            st.info(item["suggested_response"])
+
         st.markdown(
             f"<p style='font-size:0.75rem;color:{APPLE['secondary_label']};margin-bottom:12px'>"
             f"Run ID: <code>{run_id}</code> · {item.get('timestamp', '')}</p>",
@@ -146,21 +154,25 @@ for item in active:
         )
 
         with st.expander("Tomar decisión", expanded=True):
-            reason = st.text_input(
-                "Motivo (opcional)",
-                key=f"reason_{run_id}",
-                placeholder="Ej: Cliente VIP, proceder con cautela...",
+            manual = st.text_area(
+                "Escribir respuesta manual (opcional — deja vacío para usar la sugerencia)",
+                key=f"manual_{run_id}",
+                placeholder="Escribe aquí la respuesta que se enviará al cliente tal cual...",
+                height=100,
             )
 
-            btn1, btn2, _ = st.columns([2, 2, 4])
-            approve = btn1.button("Aprobar", key=f"approve_{run_id}", use_container_width=True, type="primary")
-            reject  = btn2.button("Rechazar", key=f"reject_{run_id}", use_container_width=True)
+            btn1, btn2, btn3 = st.columns(3)
+            accept   = btn1.button("Aceptar sugerencia", key=f"accept_{run_id}",  use_container_width=True, type="primary")
+            send_man = btn2.button("Enviar respuesta manual", key=f"manual_btn_{run_id}", use_container_width=True)
+            reject   = btn3.button("Rechazar caso", key=f"reject_{run_id}", use_container_width=True)
 
-            if approve or reject:
+            if send_man and not manual.strip():
+                st.error("Escribe una respuesta manual antes de enviarla.")
+            elif accept or send_man or reject:
                 payload = {
-                    "run_id": run_id,
-                    "approved": approve,
-                    "reason": reason.strip() or None,
+                    "run_id":          run_id,
+                    "approved":        not reject,
+                    "manual_response": manual.strip() if send_man and manual.strip() else None,
                 }
                 with st.spinner("Enviando decisión..."):
                     dec = api_post_auth("/api/v1/supervisor/decide", payload, token)
@@ -174,7 +186,9 @@ for item in active:
                 elif dec.status_code != 200:
                     st.error(f"Error {dec.status_code}: {dec.text}")
                 else:
-                    st.session_state["decisions"][run_id] = {"approved": approve, "result": dec.json()}
+                    approved = not reject
+                    st.session_state["decisions"][run_id] = {"approved": approved, "result": dec.json()}
+                    st.session_state[cache_ts_key] = 0  # invalidar caché
                     st.rerun()
 
 # ── Decisions made this session ───────────────────────────────────────────────
