@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
 # Application instance
 # ---------------------------------------------------------------------------
 
-from app.api.endpoints import auth, supervisor, webhooks  # noqa: E402
+from app.api.endpoints import auth, metrics, supervisor, webhooks  # noqa: E402
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -156,6 +156,12 @@ app.include_router(
     supervisor.router,
     prefix="/api/v1/supervisor",
     tags=["Supervisor — Human-in-the-Loop"],
+)
+
+app.include_router(
+    metrics.router,
+    prefix="/api/v1/metrics",
+    tags=["Metrics — Statistics Dashboard"],
 )
 
 # ---------------------------------------------------------------------------

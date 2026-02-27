@@ -45,6 +45,7 @@ class ProcessingResponse(BaseModel):
         ),
     )
     sentiment: str = Field(..., description="Detected sentiment: positive | neutral | negative.")
+    intent: str = Field(..., description="Detected intent: refund_request | support_request | general_inquiry.")
     sla_breached: bool = Field(..., description="Whether the SLA threshold was exceeded.")
     proposed_action: str = Field(..., description="Action proposed by the Triage agent.")
     supervisor_note: Optional[str] = Field(
@@ -93,3 +94,54 @@ class SupervisorDecision(BaseModel):
     reason: Optional[str] = Field(
         None, description="Optional free-text reason for the decision."
     )
+
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
+class SentimentCount(BaseModel):
+    """Count and share for one sentiment bucket."""
+
+    sentiment: str
+    count: int
+    percentage: float
+
+
+class IntentCount(BaseModel):
+    """Count and share for one intent bucket."""
+
+    intent: str
+    count: int
+    percentage: float
+
+
+class ActionCount(BaseModel):
+    """Count and share for one proposed-action bucket."""
+
+    action: str
+    count: int
+    percentage: float
+
+
+class ClientStat(BaseModel):
+    """Per-client aggregated activity."""
+
+    client_id: str
+    total: int
+    negative_count: int
+    sla_breached_count: int
+
+
+class MetricsSummary(BaseModel):
+    """Top-level aggregated statistics returned by the metrics endpoint."""
+
+    total_messages: int = Field(..., description="Total messages processed since the system started.")
+    escalation_rate: float = Field(..., description="Percentage of messages escalated to a human supervisor.")
+    sla_breach_rate: float = Field(..., description="Percentage of messages that breached the SLA threshold.")
+    approval_rate: float = Field(..., description="Percentage of escalated messages that were approved (0 if none escalated).")
+    pending_approvals: int = Field(..., description="Number of messages currently waiting for a supervisor decision.")
+    sentiment_distribution: list[SentimentCount]
+    intent_distribution: list[IntentCount]
+    action_distribution: list[ActionCount]
+    top_clients: list[ClientStat] = Field(..., description="Top 10 clients by message volume.")

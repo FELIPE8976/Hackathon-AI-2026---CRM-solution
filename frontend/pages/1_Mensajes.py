@@ -140,10 +140,18 @@ if submitted:
         st.info(data.get("message", status))
 
     # ── Info cards ──
+    INTENT_ES = {
+        "refund_request":  "Solicitud de reembolso",
+        "support_request": "Soporte técnico",
+        "general_inquiry": "Consulta general",
+    }
+    intent_raw = data.get("intent", "")
+    intent_display = INTENT_ES.get(intent_raw, intent_raw.replace("_", " ").capitalize() if intent_raw else "-")
+
     cards_html = (
         '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0">'
         + info_card("Sentimiento", sentiment_badge(data.get("sentiment", "-")))
-        + info_card("Intención", data.get("intent", "-").replace("_", " ").capitalize())
+        + info_card("Intención", intent_display)
         + info_card("Acción", action_label(data.get("proposed_action", "-")))
         + info_card("SLA", sla_badge(data.get("sla_breached", False)))
         + "</div>"

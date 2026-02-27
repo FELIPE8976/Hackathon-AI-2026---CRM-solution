@@ -8,6 +8,7 @@ When approved, the Executor agent is called directly with the stored state
 so that the automated response is finally sent to the client.
 """
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,8 +18,11 @@ from app.agents.executor import run_executor
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import get_current_supervisor
+from app.core.stats_store import update_stat_decision
 from app.core.store import delete_pending, get_pending, list_pending
 from app.models.schemas import PendingApprovalItem, ProcessingResponse, SupervisorDecision
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -109,11 +113,13 @@ async def decide_action(
             execution_result = executor_update.get("execution_result")
 
         state["execution_result"] = execution_result
+        await _update_stat(decision.run_id, approved=True, db=db)
 
         return ProcessingResponse(
             run_id=decision.run_id,
             status="approved_and_executed",
             sentiment=state["sentiment"],
+            intent=state["intent"],
             sla_breached=state["sla_breached"],
             proposed_action=state["proposed_action"],
             supervisor_note=state.get("supervisor_note"),
@@ -128,10 +134,12 @@ async def decide_action(
     # Rejected → log and return without executing                          #
     # ------------------------------------------------------------------ #
     state["human_approved"] = False
+    await _update_stat(decision.run_id, approved=False, db=db)
     return ProcessingResponse(
         run_id=decision.run_id,
         status="rejected",
         sentiment=state["sentiment"],
+        intent=state["intent"],
         sla_breached=state["sla_breached"],
         proposed_action=state["proposed_action"],
         supervisor_note=state.get("supervisor_note"),
@@ -141,3 +149,16 @@ async def decide_action(
             + (f"Reason: {decision.reason}" if decision.reason else "No reason provided.")
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+async def _update_stat(run_id: str, approved: bool, db: AsyncSession) -> None:
+    """Fire-and-forget stat update; logs on failure without raising."""
+    try:
+        await update_stat_decision(run_id, approved, db)
+    except Exception:
+        logger.exception("Failed to update message stat for run_id=%s", run_id)

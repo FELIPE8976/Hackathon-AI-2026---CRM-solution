@@ -12,6 +12,7 @@ the state is persisted to PostgreSQL and the caller receives a
 """
 
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
@@ -22,8 +23,11 @@ from app.agents.state import AgentState
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import verify_api_key
+from app.core.stats_store import record_message_stat
 from app.core.store import save_pending
 from app.models.schemas import ProcessingResponse, WebhookPayload
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -69,10 +73,12 @@ async def receive_message(
     # ------------------------------------------------------------------ #
     if final_state.get("proposed_action") == "escalate_to_human":
         await save_pending(run_id, final_state, db)
+        await _record_stat(run_id, final_state, "pending_approval", db)
         return ProcessingResponse(
             run_id=run_id,
             status="pending_approval",
             sentiment=final_state["sentiment"],
+            intent=final_state["intent"],
             sla_breached=final_state["sla_breached"],
             proposed_action=final_state["proposed_action"],
             supervisor_note=final_state.get("supervisor_note"),
@@ -87,10 +93,12 @@ async def receive_message(
     # ------------------------------------------------------------------ #
     # Branch: graph completed automatically                                #
     # ------------------------------------------------------------------ #
+    await _record_stat(run_id, final_state, "processed", db)
     return ProcessingResponse(
         run_id=run_id,
         status="processed",
         sentiment=final_state["sentiment"],
+        intent=final_state["intent"],
         sla_breached=final_state["sla_breached"],
         proposed_action=final_state["proposed_action"],
         supervisor_note=None,
@@ -100,3 +108,21 @@ async def receive_message(
             f"Action executed: {final_state['proposed_action']}."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+async def _record_stat(
+    run_id: str,
+    state: AgentState,
+    final_status: str,
+    db: AsyncSession,
+) -> None:
+    """Fire-and-forget stat recording; logs on failure without raising."""
+    try:
+        await record_message_stat(run_id, state, final_status, db)
+    except Exception:
+        logger.exception("Failed to record message stat for run_id=%s", run_id)

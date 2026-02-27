@@ -234,6 +234,14 @@ def login(username: str, password: str):
         return None
 
 
+def api_get_metrics() -> dict | None:
+    """Call GET /api/v1/metrics/summary and return the parsed JSON or None."""
+    response = api_get("/api/v1/metrics/summary")
+    if response and response.status_code == 200:
+        return response.json()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Badge helpers — Apple HIG HTML chips
 # ---------------------------------------------------------------------------
