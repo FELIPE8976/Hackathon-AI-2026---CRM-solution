@@ -12,7 +12,7 @@ import logging
 
 from pydantic import BaseModel
 from typing import Literal
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Output contract — the LLM is forced to return exactly this shape
 # ---------------------------------------------------------------------------
+
 
 class _AnalystOutput(BaseModel):
     sentiment: Literal["positive", "neutral", "negative"]
@@ -68,10 +69,10 @@ to escalate unnecessarily than to miss a dissatisfied client.
 # LLM singleton — instantiated once at module load, reused across requests
 # ---------------------------------------------------------------------------
 
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
-    temperature=0,          # deterministic: classification must be reproducible
-    google_api_key=settings.GEMINI_API_KEY,
+_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=settings.GITHUB_TOKEN,
+    openai_api_base="https://models.inference.ai.azure.com",
 )
 _structured_llm = _llm.with_structured_output(_AnalystOutput)
 
@@ -79,6 +80,7 @@ _structured_llm = _llm.with_structured_output(_AnalystOutput)
 # ---------------------------------------------------------------------------
 # Node function
 # ---------------------------------------------------------------------------
+
 
 def run_analyst(state: AgentState) -> dict:
     """
@@ -90,18 +92,26 @@ def run_analyst(state: AgentState) -> dict:
     message: str = state["messages"][-1]["content"]
 
     try:
-        result: _AnalystOutput = _structured_llm.invoke([
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user",   "content": message},
-        ])
+        result: _AnalystOutput = _structured_llm.invoke(
+            [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ]
+        )
         sentiment = result.sentiment
-        intent    = result.intent
+        intent = result.intent
 
     except Exception as exc:
         # Fallback: safe defaults that avoid silent failures blocking the pipeline
-        logger.error("LLM error — falling back to defaults. client=%s error=%s", state["client_id"], exc)
+        logger.error(
+            "LLM error — falling back to defaults. client=%s error=%s",
+            state["client_id"],
+            exc,
+        )
         sentiment = "neutral"
-        intent    = "general_inquiry"
+        intent = "general_inquiry"
 
-    logger.info("client=%s sentiment=%s intent=%s", state["client_id"], sentiment, intent)
+    logger.info(
+        "client=%s sentiment=%s intent=%s", state["client_id"], sentiment, intent
+    )
     return {"sentiment": sentiment, "intent": intent}

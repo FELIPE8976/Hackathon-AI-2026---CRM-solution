@@ -5,9 +5,15 @@ Run with:
     uvicorn app.main:app --reload --port 8000
 """
 
+import asyncio
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager
+
+# asyncpg is incompatible with ProactorEventLoop (Windows default in Python 3.8+).
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,23 +50,20 @@ from app.core.limiter import limiter  # noqa: E402
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
 
+    # Pre-warm the DB connection pool so the first user request is not slow.
+    # The cold TCP handshake through Docker can take ~20 s on Windows — paying
+    # that cost once at startup is far better than on a live request.
+    from app.core.database import engine
+    from sqlalchemy import text
     try:
-        from alembic import command
-        from alembic.config import Config as AlembicConfig
-
-        alembic_cfg = AlembicConfig("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully.")
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("Database connection pool warmed up.")
     except Exception as exc:
-        logger.warning(
-            "Could not run Alembic migrations automatically: %s. "
-            "Run 'alembic upgrade head' manually before starting the server.",
-            exc,
-        )
+        logger.warning("Could not pre-warm DB pool: %s", exc)
 
     yield
 
-    from app.core.database import engine
     await engine.dispose()
     logger.info("Database engine disposed. Shutdown complete.")
 
@@ -171,3 +174,21 @@ async def root() -> dict:
 @app.get("/health", tags=["Health"], summary="Health check")
 async def health_check() -> dict:
     return {"status": "healthy"}
+
+
+@app.get("/health/db", tags=["Health"], summary="Database connectivity check")
+async def health_db() -> dict:
+    import traceback
+    from sqlalchemy import text
+    from app.core.database import engine
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(text("SELECT 1"))
+            row = result.scalar()
+        return {"status": "ok", "result": row}
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        }

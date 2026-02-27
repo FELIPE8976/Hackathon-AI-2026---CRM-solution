@@ -1,5 +1,11 @@
 import asyncio
+import sys
 from logging.config import fileConfig
+
+# asyncpg is incompatible with ProactorEventLoop (Windows default in Python 3.8+).
+# Switch to SelectorEventLoop so that asyncpg connections work correctly.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -43,7 +49,12 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations through a sync connection."""
-    engine = create_async_engine(settings.DATABASE_URL)
+    # Pass ssl=False explicitly via connect_args to avoid SSL negotiation errors
+    # on Docker-hosted PostgreSQL (which has no SSL configured by default).
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        connect_args={"ssl": False},
+    )
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()

@@ -18,7 +18,7 @@ Design rationale:
 import logging
 from datetime import datetime, timezone
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -52,16 +52,17 @@ CONSTRAINTS:
 # LLM singleton — low temperature for consistent, professional phrasing
 # ---------------------------------------------------------------------------
 
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
-    temperature=0.1,        # slight variation for natural phrasing, not creativity
-    google_api_key=settings.GEMINI_API_KEY,
+_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=settings.GITHUB_TOKEN,
+    openai_api_base="https://models.inference.ai.azure.com",
 )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _check_sla(timestamp_iso: str) -> bool:
     """Returns True if the message is older than the configured SLA threshold."""
@@ -96,10 +97,12 @@ def _generate_supervisor_note(state: AgentState, sla_breached: bool) -> str | No
     )
 
     try:
-        response = _llm.invoke([
-            {"role": "system", "content": _SUPERVISOR_NOTE_PROMPT},
-            {"role": "user",   "content": user_context},
-        ])
+        response = _llm.invoke(
+            [
+                {"role": "system", "content": _SUPERVISOR_NOTE_PROMPT},
+                {"role": "user", "content": user_context},
+            ]
+        )
         return response.content.strip()
     except Exception as exc:
         logger.error("Supervisor note generation failed: %s", exc)
@@ -109,6 +112,7 @@ def _generate_supervisor_note(state: AgentState, sla_breached: bool) -> str | No
 # ---------------------------------------------------------------------------
 # Node function
 # ---------------------------------------------------------------------------
+
 
 def run_triage(state: AgentState) -> dict:
     """
@@ -125,9 +129,9 @@ def run_triage(state: AgentState) -> dict:
     | intent == "refund_request"             | process_refund            |
     | all other cases                        | send_standard_response    |
     """
-    sla_breached    = _check_sla(state["timestamp"])
-    sentiment       = state.get("sentiment", "neutral")
-    intent          = state.get("intent", "general_inquiry")
+    sla_breached = _check_sla(state["timestamp"])
+    sentiment = state.get("sentiment", "neutral")
+    intent = state.get("intent", "general_inquiry")
     supervisor_note = None
 
     # ------------------------------------------------------------------ #
@@ -145,11 +149,13 @@ def run_triage(state: AgentState) -> dict:
 
     logger.info(
         "client=%s sla_breached=%s proposed_action=%s",
-        state["client_id"], sla_breached, proposed_action,
+        state["client_id"],
+        sla_breached,
+        proposed_action,
     )
 
     return {
-        "sla_breached":    sla_breached,
+        "sla_breached": sla_breached,
         "proposed_action": proposed_action,
         "supervisor_note": supervisor_note,
     }

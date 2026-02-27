@@ -13,7 +13,7 @@ stylistic constraints so that every response is:
 
 import logging
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -70,10 +70,11 @@ CONTENT INSTRUCTION:
 # LLM singleton — slightly higher temperature for natural, varied phrasing
 # ---------------------------------------------------------------------------
 
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
-    temperature=0.3,        # natural variation in phrasing while staying professional
-    google_api_key=settings.GEMINI_API_KEY,
+_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.3,
+    openai_api_key=settings.GITHUB_TOKEN,
+    openai_api_base="https://models.inference.ai.azure.com",
 )
 
 
@@ -97,6 +98,7 @@ _FALLBACK_RESPONSES: dict[str, str] = {
 # Node function
 # ---------------------------------------------------------------------------
 
+
 def run_executor(state: AgentState) -> dict:
     """
     Executor Agent node for LangGraph.
@@ -105,22 +107,30 @@ def run_executor(state: AgentState) -> dict:
     partial state update containing the execution_result.
     Falls back to a static professional message if the LLM call fails.
     """
-    action         = state.get("proposed_action", "send_standard_response")
+    action = state.get("proposed_action", "send_standard_response")
     action_context = _ACTION_CONTEXT.get(action, _FALLBACK_ACTION_CONTEXT)
     client_message = state["messages"][-1]["content"]
 
     system_prompt = _SYSTEM_PROMPT.format(action_context=action_context)
 
     try:
-        response = _llm.invoke([
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": f"Client message: {client_message}"},
-        ])
+        response = _llm.invoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Client message: {client_message}"},
+            ]
+        )
         execution_result = response.content.strip()
 
     except Exception as exc:
-        logger.error("LLM error — using static fallback. client=%s error=%s", state["client_id"], exc)
-        execution_result = _FALLBACK_RESPONSES.get(action, _FALLBACK_RESPONSES["send_standard_response"])
+        logger.error(
+            "LLM error — using static fallback. client=%s error=%s",
+            state["client_id"],
+            exc,
+        )
+        execution_result = _FALLBACK_RESPONSES.get(
+            action, _FALLBACK_RESPONSES["send_standard_response"]
+        )
 
     logger.info("client=%s action=%s response_drafted=true", state["client_id"], action)
     return {"execution_result": execution_result}

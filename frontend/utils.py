@@ -8,6 +8,7 @@ load_dotenv()
 
 DEFAULT_API_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 SLA_THRESHOLD_HOURS = float(os.environ.get("SLA_THRESHOLD_HOURS", "2.0"))
+WEBHOOK_API_KEY = os.environ.get("WEBHOOK_API_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Apple HIG — System Colors
@@ -187,14 +188,15 @@ def get_api_url() -> str:
 
 def api_get(path: str):
     try:
-        return requests.get(get_api_url() + path, timeout=5)
+        return requests.get(get_api_url() + path, timeout=15)
     except requests.exceptions.RequestException:
         return None
 
 
 def api_post(path: str, payload: dict):
     try:
-        return requests.post(get_api_url() + path, json=payload, timeout=15)
+        headers = {"X-Api-Key": WEBHOOK_API_KEY} if WEBHOOK_API_KEY else {}
+        return requests.post(get_api_url() + path, json=payload, headers=headers, timeout=90)
     except requests.exceptions.RequestException:
         return None
 
@@ -203,7 +205,7 @@ def api_get_auth(path: str, token: str):
     """GET with JWT Bearer token — use for protected supervisor endpoints."""
     try:
         headers = {"Authorization": f"Bearer {token}"}
-        return requests.get(get_api_url() + path, headers=headers, timeout=5)
+        return requests.get(get_api_url() + path, headers=headers, timeout=15)
     except requests.exceptions.RequestException:
         return None
 
@@ -223,7 +225,7 @@ def login(username: str, password: str):
         response = requests.post(
             get_api_url() + "/api/v1/auth/login",
             data={"username": username, "password": password},
-            timeout=10,
+            timeout=20,
         )
         if response.status_code == 200:
             return response.json().get("access_token")

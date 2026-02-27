@@ -70,7 +70,20 @@ if "decisions" not in st.session_state:
     st.session_state["decisions"] = {}
 
 # ── Fetch ─────────────────────────────────────────────────────────────────────
-response = api_get_auth("/api/v1/supervisor/pending", token)
+import time
+cache_key = "pending_cache"
+cache_ts_key = "pending_cache_ts"
+now = time.time()
+
+if cache_key not in st.session_state or (now - st.session_state.get(cache_ts_key, 0)) > 10:
+    response = api_get_auth("/api/v1/supervisor/pending", token)
+    if response is not None and response.status_code == 200:
+        st.session_state[cache_key] = response
+        st.session_state[cache_ts_key] = now
+    else:
+        response = st.session_state.get(cache_key)
+else:
+    response = st.session_state[cache_key]
 
 if response is None:
     st.error("No se pudo conectar al backend. Verifica la URL en el sidebar.")

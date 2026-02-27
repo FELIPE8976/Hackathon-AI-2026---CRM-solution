@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     # Empty string = "not set". Validators below reject blank values so a
     # missing env var is caught at startup with a clear error message.
     GEMINI_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    GITHUB_TOKEN: str = ""
     DATABASE_URL: str = ""
 
     # Optional with a safe default
@@ -54,11 +56,11 @@ class Settings(BaseSettings):
         "extra": "ignore",
     }
 
-    @field_validator("GEMINI_API_KEY")
+    @field_validator("GITHUB_TOKEN")
     @classmethod
-    def gemini_key_must_not_be_empty(cls, v: str) -> str:
+    def github_token_must_not_be_empty(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError("GEMINI_API_KEY must not be empty")
+            raise ValueError("GITHUB_TOKEN must not be empty")
         return v
 
     @field_validator("DATABASE_URL")

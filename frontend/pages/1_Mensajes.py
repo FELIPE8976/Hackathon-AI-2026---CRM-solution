@@ -113,7 +113,11 @@ if submitted:
     st.divider()
 
     if response is None:
-        st.error("No se pudo conectar al backend. Verifica la URL en el sidebar.")
+        st.error(
+            "El pipeline tardó demasiado o el backend no responde. "
+            "Los modelos de IA en free tier pueden demorar hasta 60 s. "
+            "Verifica que el backend esté corriendo y reintenta."
+        )
         st.stop()
 
     if response.status_code != 200:
